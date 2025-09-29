@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Dynamic Promissory Note with Amortization</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<style>
+  body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.4; }
+  label { display: inline-block; width: 150px; margin-top: 10px; }
+  input { width: 250px; margin-bottom: 10px; }
+  button { margin-top: 10px; padding: 5px 10px; }
+  .sectionTitle { font-weight: bold; font-size: 14pt; text-align: center; margin-bottom: 10px; }
+  .folioContainer {
+    width: 612px;  
+    height: 936px; 
+    padding: 15px;
+    border: 1px solid #000;
+    box-sizing: border-box;
+    font-family: Arial, sans-serif;
+    font-size: 10pt;   
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+    margin: 0 auto 20px auto;
+    line-height: 1.3;
+  }
+  .boldText { font-weight: bold; }
+
+  @media print {
+    body * { visibility: hidden; }
+    #notePrintContainer { visibility: visible; position: absolute; left: 0; top: 0; width: 100%; }
+  }
+</style>
+</head>
+<body>
+
+<h2>Dynamic Promissory Note</h2>
+
+<div id="inputSection">
+  <label>Borrower Name:</label>
+  <input type="text" id="borrower" value="Atty. Marian Kanna Motoomull Idulsa"><br>
+  <label>Lender Name:</label>
+  <input type="text" id="lender" value="Cyprus Luck Dominic Rodriguez"><br>
+  <label>Principal Amount (₱):</label>
+  <input type="number" id="principal" value="200000"><br>
+  <label>Term (months):</label>
+  <input type="number" id="term" value="6"><br>
+  <label>Interest Rate (% monthly flat):</label>
+  <input type="number" id="interestRate" value="3"><br>
+  <button onclick="generateNote()">Generate Promissory Note</button>
+  <button onclick="downloadPDF()">Download PDF</button>
+  <button onclick="printNote()">Print</button>
+</div>
+
+<div id="notePrintContainer">
+  <div class="folioContainer" id="promissoryContainer">
+    <div id="promissoryTitle" class="sectionTitle">PROMISSORY NOTE</div>
+    <div id="promissoryNote"></div>
+  </div>
+
+  <div class="folioContainer" id="amortizationContainer">
+    <div id="amortizationTitle" class="sectionTitle">AMORTIZATION TABLE</div>
+    <div id="amortizationTable" style="font-family: monospace;"></div>
+  </div>
+</div>
+
+<script>
+let noteContent = '';
+
+function formatCurrency(amount) {
+  return "₱" + parseFloat(amount).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2});
+}
+
+function generateAmortizationTable(borrower, principal, term, interestRate) {
+  const serviceFee = principal * 0.01;
+  const netProceeds = principal - serviceFee;
+  const monthlyInterest = principal * (interestRate / 100);
+  const monthlyPayment = (principal + (monthlyInterest * term)) / term;
+
+  let table = `Borrower: ${borrower}\n\n`; // <-- Borrower Name included
+  table += `Summary of Borrowed Amount\n`;
+  table += `Principal: ${formatCurrency(principal)}\n`;
+  table += `Interest Rate: ${interestRate}% per month\n`;
+  table += `Term: ${term} months\n`;
+  table += `Monthly Payment: ${formatCurrency(monthlyPayment)}\n`;
+  table += `Net Proceeds (after 1% service fee): ${formatCurrency(netProceeds)}\n\n`;
+
+  table += "Month | Principal | Interest | Total Payment | Balance\n";
+  let balance = principal;
+  for (let i = 1; i <= term; i++) {
+    const interest = principal * (interestRate / 100);
+    const principalPayment = monthlyPayment - interest;
+    balance -= principalPayment;
+    if (balance < 0) balance = 0;
+    table += `${i} | ${formatCurrency(principalPayment)} | ${formatCurrency(interest)} | ${formatCurrency(monthlyPayment)} | ${formatCurrency(balance)}\n`;
+  }
+
+  return table;
+}
+
+function generateNote() {
+  const borrower = document.getElementById('borrower').value;
+  const lender = document.getElementById('lender').value;
+  const principal = parseFloat(document.getElementById('principal').value);
+  const term = parseInt(document.getElementById('term').value);
+  const interestRate = parseFloat(document.getElementById('interestRate').value);
+
+  noteContent = `
+Date: _____________________
+
+FOR VALUE RECEIVED, the undersigned Borrower, ${borrower}, promises to pay to the order of Lender, ${lender}, the principal sum of ${formatCurrency(principal)}, together with interest, penalties, and other amounts as set forth below, under the following terms and conditions:
+
+Principal and Interest
+a. Principal Amount: ${formatCurrency(principal)}
+b. Interest Rate: ${interestRate}% per month, computed on a flat rate monthly basis.
+c. Term: ${term} months, commencing upon the release of the Net Proceeds to the Borrower.
+
+Repayment Schedule
+The Borrower shall pay the Lender in equal monthly installments of principal and interest, due on the same calendar day of each month, starting on the month after commencement and continuing for ${term} consecutive months.
+
+Late Payment and Penalty
+a. Any unpaid monthly installment shall incur a penalty of 3% of the unpaid monthly amount, computed monthly from the due date until paid.
+b. In the event that the Borrower fails to pay three (3) consecutive monthly installments, the entire unpaid balance of principal, interest, and penalties shall become immediately due and payable at the option of the Lender.
+
+Enforcement and Collection
+a. The Borrower expressly agrees that, upon default as described in Clause 3(b), the Lender may initiate collection or legal action to recover the entire unpaid balance, including accrued interest, penalties, attorney’s fees, and other costs of collection.
+b. The Lender may exercise all legal remedies available under the laws of the Republic of the Philippines for the enforcement of this Promissory Note.
+
+IN WITNESS WHEREOF, the parties have executed this Promissory Note on the date first above written.
+
+Borrower:
+_____________________________
+${borrower}
+Date: ___________
+
+Lender:
+_____________________________
+${lender}
+Date: ___________
+
+Signed in the presence of:
+_____________________________
+Witness 
+
+  `;
+
+  let noteHtml = noteContent
+    .replace(new RegExp(`\\b${borrower}\\b`, 'g'), `<span class="boldText">${borrower}</span>`)
+    .replace(new RegExp(`\\b${lender}\\b`, 'g'), `<span class="boldText">${lender}</span>`)
+    .replace(new RegExp(formatCurrency(principal), 'g'), `<span class="boldText">${formatCurrency(principal)}</span>`);
+
+  document.getElementById('promissoryNote').innerHTML = noteHtml;
+
+  const amortizationContent = generateAmortizationTable(borrower, principal, term, interestRate);
+  const lines = amortizationContent.split('\n');
+  const amortHtml = '<span class="boldText">' + lines.slice(0,6).join('<br>') + '</span><br>' + lines.slice(6).join('<br>');
+  document.getElementById('amortizationTable').innerHTML = amortHtml;
+}
+
+async function downloadPDF() {
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF({ unit: "pt", format: [612, 936] });
+  const margin = 15;
+  const pageWidth = pdf.internal.pageSize.getWidth() - 2 * margin;
+
+  const hiddenDiv = document.createElement('div');
+  hiddenDiv.style.position = 'absolute';
+  hiddenDiv.style.left = '-9999px';
+  document.body.appendChild(hiddenDiv);
+
+  const containers = [
+    document.getElementById('promissoryContainer').cloneNode(true),
+    document.getElementById('amortizationContainer').cloneNode(true)
+  ];
+
+  for (let i = 0; i < containers.length; i++) {
+    const container = containers[i];
+    hiddenDiv.appendChild(container);
+    const canvas = await html2canvas(container, { scale: 2 });
+    const data = canvas.toDataURL('image/png');
+    const props = pdf.getImageProperties(data);
+    const height = (props.height * pageWidth) / props.width;
+
+    if (i > 0) pdf.addPage(); 
+    pdf.addImage(data, 'PNG', margin, margin, pageWidth, height);
+  }
+
+  document.body.removeChild(hiddenDiv);
+  pdf.save("Promissory_Note_with_Amortization.pdf");
+}
+
+function printNote() {
+  window.print();
+}
+</script>
+
+</body>
+</html>
